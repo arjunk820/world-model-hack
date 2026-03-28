@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SynthGrasp — Robot Manipulation Dataset Generator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: monospace; background: #0e0e0e; color: #ccc; padding: 20px; margin: 0; }
+    h1 { color: #fff; font-size: 18px; margin: 0 0 4px; }
+    .subtitle { color: #666; font-size: 12px; margin-bottom: 16px; }
+    .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    select { padding: 6px 10px; font-family: monospace; background: #1a1a1a; color: #fff; border: 1px solid #333; }
+    button { padding: 6px 14px; cursor: pointer; font-family: monospace; background: #1a1a1a; color: #0f0; border: 1px solid #0f0; }
+    button:hover { background: #0f0; color: #111; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    #download { display: none; background: #1a1a1a; color: #4af; border-color: #4af; }
+    #download:hover { background: #4af; color: #111; }
+
+    /* Detection section */
+    .detect-section { background: #111; border: 1px solid #222; border-radius: 4px;
+                      padding: 14px 14px 10px; margin-bottom: 12px; }
+    .detect-section h3 { color: #555; font-size: 10px; font-weight: normal;
+                         text-transform: uppercase; letter-spacing: 1px; margin: 0 0 10px; }
+    .detect-api-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .detect-api-row .api-input { flex: 1; }
+    .detect-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .detect-row:last-of-type { margin-bottom: 0; }
+    .detect-tag { font-size: 9px; font-weight: bold; letter-spacing: 0.08em; padding: 3px 6px;
+                  border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
+    .detect-tag.tag-3d  { color: #888; border: 1px solid #4448; background: #44444408; }
+    .detect-tag.tag-img { color: #888; border: 1px solid #4448; background: #44444408; }
+    .api-input { padding: 5px 8px; font-family: monospace; font-size: 11px;
+                 background: #1a1a1a; color: #fff; border: 1px solid #333; min-width: 0; }
+    .file-btn { position: relative; overflow: hidden; background: #1a1a1a; color: #888;
+                border: 1px solid #333; flex-shrink: 0; }
+    .file-btn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+    #detect3dBtn { background: #1a1a1a; color: #c8f; border-color: #c8f; flex-shrink: 0; }
+    #detect3dBtn:hover:not(:disabled) { background: #c8f; color: #111; }
+    #detectImgBtn { background: #1a1a1a; color: #c8f; border-color: #c8f; flex-shrink: 0; }
+    #detectImgBtn:hover:not(:disabled) { background: #c8f; color: #111; }
+    #detectStatus { font-size: 11px; color: #666; margin-top: 8px; min-height: 16px; }
+    .sim-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px;
+             border-radius: 12px; font-size: 10px; border: 1px solid #333;
+             background: #141414; color: #ccc; }
+    .badge.cylinder { border-color: #4af; color: #4af; }
+    .badge.cuboid   { border-color: #f90; color: #f90; }
+    .badge-source { font-size: 9px; color: #555; margin-left: 2px; }
+
+    #log { white-space: pre; font-size: 11px; line-height: 1.6; background: #080808; padding: 12px;
+           border: 1px solid #222; max-height: 200px; overflow-y: auto; margin-bottom: 16px; }
+
+    /* Results grid */
+    #results { display: none; }
+    .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .obj-card {
+      background: #141414; border: 1px solid #2a2a2a; border-radius: 6px; padding: 14px;
+      border-left: 3px solid #333;
+    }
+    .obj-card.pinch  { border-left-color: #f90; }
+    .obj-card.wrap   { border-left-color: #4af; }
+    .obj-card.hook   { border-left-color: #a8f; }
+    .obj-card.bisym  { border-left-color: #4fa; }
+    .obj-card.biasym { border-left-color: #f4a; }
+    .obj-name { font-size: 13px; font-weight: bold; color: #fff; margin-bottom: 6px; }
+    .grasp-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px;
+      font-weight: bold; margin-bottom: 8px;
+    }
+    .pinch  .grasp-badge { background: #f901; color: #f90; border: 1px solid #f90; }
+    .wrap   .grasp-badge { background: #4af1; color: #4af; border: 1px solid #4af; }
+    .hook   .grasp-badge { background: #a8f1; color: #a8f; border: 1px solid #a8f; }
+    .bisym  .grasp-badge { background: #4fa1; color: #4fa; border: 1px solid #4fa; }
+    .biasym .grasp-badge { background: #f4a1; color: #f4a; border: 1px solid #f4a; }
+    /* 5-score row */
+    .score-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 4px; font-size: 10px; }
+    .score-row .s-item { display: flex; flex-direction: column; align-items: center;
+                         background: #0d0d0d; border-radius: 3px; padding: 4px 6px; min-width: 44px; }
+    .score-row .s-lbl { color: #555; font-size: 9px; margin-bottom: 2px; }
+    .score-row .s-val { font-weight: bold; font-size: 12px; }
+    .metric { background: #0d0d0d; padding: 6px 8px; border-radius: 3px; font-size: 11px;
+              display: inline-block; margin-top: 2px; }
+    .metric-label { color: #666; font-size: 10px; }
+    .metric-value { color: #eee; font-size: 13px; font-weight: bold; }
+    .score-bar { height: 4px; background: #222; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .score-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+    .pinch  .score-fill { background: #f90; }
+    .wrap   .score-fill { background: #4af; }
+    .hook   .score-fill { background: #a8f; }
+    .bisym  .score-fill { background: #4fa; }
+    .biasym .score-fill { background: #f4a; }
+    .why { margin-top: 8px; font-size: 10px; color: #555; line-height: 1.5; }
+    /* Confidence indicator */
+    .card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .card-header .obj-name { margin-bottom: 0; flex: 1; min-width: 0; }
+    .conf-badge { font-size: 9px; font-weight: bold; letter-spacing: 0.05em;
+                  padding: 2px 6px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; }
+    .conf-high { color: #0f0; border: 1px solid #0f04; background: #0f0009; }
+    .conf-med  { color: #fa0; border: 1px solid #fa04; background: #fa0009; }
+    .conf-low  { color: #f55; border: 1px solid #f554; background: transparent; }
+    .review-bar { font-size: 10px; color: #f55; margin-top: 6px; padding: 4px 8px;
+                  border: 1px solid #f552; border-radius: 3px; background: #f550051a; }
+
+    .summary { margin-top: 16px; padding: 12px; background: #141414; border: 1px solid #2a2a2a;
+               border-radius: 6px; font-size: 12px; color: #888; }
+    .summary strong { color: #fff; }
+
+    /* View toggle */
+    .view-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .view-bar span { color: #555; font-size: 11px; margin-right: 4px; }
+    .toggle-btn { padding: 3px 10px; font-size: 11px; font-family: monospace;
+                  cursor: pointer; border: 1px solid #333; background: #1a1a1a; color: #666; }
+    .toggle-btn.active { border-color: #0f0; color: #0f0; background: #0f01; }
+
+    /* Table view */
+    #tableView { display: none; overflow-x: auto; }
+    .table-title { font-size: 11px; color: #555; margin-bottom: 6px; font-family: monospace; letter-spacing: 0.04em; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .data-table th { background: #111; color: #666; padding: 7px 12px; text-align: left;
+                     border-bottom: 1px solid #2a2a2a; border-right: 1px solid #1e1e1e;
+                     white-space: nowrap; cursor: pointer; user-select: none; font-weight: 600; letter-spacing: 0.03em; }
+    .data-table th.num { text-align: right; }
+    .data-table th:hover { color: #bbb; }
+    .data-table td { padding: 5px 12px; border-bottom: 1px solid #181818; border-right: 1px solid #161616;
+                     color: #aaa; white-space: nowrap; }
+    .data-table td.num { text-align: right; font-variant-numeric: tabular-nums; color: #777; }
+    .data-table td.world-cell { color: #ddd; font-weight: 600; }
+    .data-table tbody tr:hover { background: #161616; }
+    .pill { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 10px; font-weight: bold; }
+    .pill.pinch  { color: #f90; border: 1px solid #f904; background: #f9001a08; }
+    .pill.wrap   { color: #4af; border: 1px solid #4af4; background: #4af01a08; }
+    .pill.hook   { color: #a8f; border: 1px solid #a8f4; background: #a8f01a08; }
+    .pill.bisym  { color: #4fa; border: 1px solid #4fa4; background: #4fa01a08; }
+    .pill.biasym { color: #f4a; border: 1px solid #f4a4; background: #f4a01a08; }
+  </style>
+</head>
+<body>
+  <h1>Grasp Type Dataset Generator</h1>
+  <p class="subtitle">Simulates pinch · wrap · hook · bilateral-symmetric · bilateral-asymmetric grasps — generates training data for robot manipulation</p>
+
+  <!-- Step 1: World + Detection -->
+  <div class="detect-section">
+    <h3>Step 1 — Select World &amp; Detect Objects</h3>
+    <!-- Shared API key -->
+    <div class="detect-api-row">
+      <input id="apiKey" class="api-input" type="password" placeholder="Anthropic API key (sk-ant-...)" oninput="updateDetectBtns()">
+    </div>
+    <!-- Option A: preset 3D world -->
+    <div class="detect-row">
+      <span class="detect-tag tag-3d">3D</span>
+      <select id="worldSelect">
+        <option value="../data/industrial_workshop_with_tools_collider.glb" data-world="workshop">Industrial Workshop</option>
+        <option value="../data/lavish_beijing_living_room_collider.glb" data-world="living_room">Beijing Living Room</option>
+      </select>
+      <button id="detect3dBtn" onclick="runDetection3d()" disabled>Detect from 3D World</button>
+    </div>
+    <!-- Option B: upload screenshot -->
+    <div class="detect-row">
+      <span class="detect-tag tag-img">IMG</span>
+      <button class="file-btn" id="fileLabel">
+        <span id="fileName">Choose file</span>
+        <input type="file" id="screenshotFile" accept="image/*" onchange="onFileChange(this)">
+      </button>
+      <input id="uploadName" class="api-input" type="text" placeholder="World name" style="width:140px">
+      <input id="wltKey" class="api-input" type="password" placeholder="WLT-Api-Key (optional)" oninput="updateDetectBtns()" style="width:160px">
+      <button id="detectImgBtn" onclick="runDetectionImg()" disabled>Detect from Screenshot</button>
+    </div>
+    <div id="detectStatus"></div>
+  </div>
+
+  <div class="badges" id="badges"></div>
+
+  <!-- Step 2: Simulate -->
+  <div class="sim-controls">
+    <button id="runBtn" onclick="runPipeline()">Run Simulation</button>
+    <button id="download" onclick="downloadData()">Download JSON</button>
+  </div>
+
+  <pre id="log">Ready. Enter API key and click "Detect from 3D World", or run with defaults.</pre>
+
+  <div id="results">
+    <div class="view-bar">
+      <span>View:</span>
+      <button class="toggle-btn active" id="btnGrid"  onclick="setView('grid')">Grid</button>
+      <button class="toggle-btn"        id="btnTable" onclick="setView('table')">Table</button>
+    </div>
+    <div class="results-grid" id="grid"></div>
+    <div id="tableView">
+      <div class="table-title" id="tableTitle"></div>
+      <table class="data-table" id="dataTable">
+        <thead><tr>
+          <th onclick="sortTable(0)">world</th>
+          <th onclick="sortTable(1)">object_label</th>
+          <th onclick="sortTable(2)">material</th>
+          <th onclick="sortTable(3)">shape</th>
+          <th onclick="sortTable(4)">dims_summary</th>
+          <th onclick="sortTable(5)" class="num">mass_kg</th>
+          <th onclick="sortTable(6)">recommended_grasp</th>
+          <th onclick="sortTable(7)" class="num">confidence</th>
+          <th onclick="sortTable(8)"  class="num">pinch_score</th>
+          <th onclick="sortTable(9)"  class="num">wrap_score</th>
+          <th onclick="sortTable(10)" class="num">hook_score</th>
+          <th onclick="sortTable(11)" class="num">bisym_score</th>
+          <th onclick="sortTable(12)" class="num">biasym_score</th>
+          <th onclick="sortTable(13)" class="num">p_liftable</th>
+        </tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <button id="downloadCsv" onclick="downloadCSV()" style="display:none; background:#1a1a1a; color:#8f8; border-color:#8f8;">Download CSV</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+  }}
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
+
+    const logEl = document.getElementById('log');
+    const print = (msg) => { logEl.textContent += '\n' + msg; logEl.scrollTop = logEl.scrollHeight; };
+
+    let exportData = null;
+
+    // --- Claude Vision detection ---
+    const DETECTION_PROMPT = `Look at this image of a room or environment. Identify every graspable object a robot arm could pick up (exclude floors, walls, furniture too large to lift).
+
+For each object return a JSON array with these exact fields:
+- "label": short name (e.g. "ceramic mug")
+- "shape": "cylinder" or "cuboid"
+- "radius": (cylinders only) estimated radius in meters as a number
+- "height": (cylinders) estimated height in meters as a number
+- "dims": (cuboids only) [width, height, depth] in meters as array of 3 numbers
+- "mass_kg": estimated mass in kg as a number (can be up to 25 for heavy objects like suitcases)
+- "material": one of "ceramic", "wood", "metal", "plastic", "fabric"
+- "position": [x, y, z] estimated position in meters relative to scene center, y=0 is floor
+- "has_handle": true if the object has a rigid handle intended for carrying (mug handle, bucket handle, toolbox handle, suitcase pull handle, bag top handle)
+- "has_strap": true if the object has a flexible strap or loop for carrying (backpack straps, shoulder bag strap, duffel bag strap)
+- "num_handles": integer count of distinct grab points (0, 1, or 2 — e.g. pot with two side handles = 2, mug = 1, suitcase = 1, backpack = 2 straps)
+- "has_lid": true if the object has a removable or rotatable lid/cap (jar, bottle, container with separate top)
+
+Return ONLY a valid JSON array, no markdown, no explanation.
+Example: [{"label":"ceramic mug","shape":"cylinder","radius":0.04,"height":0.10,"mass_kg":0.3,"material":"ceramic","position":[0.2,0.85,0.1],"has_handle":true,"has_strap":false,"num_handles":1,"has_lid":false}]`;
+
+    const VALID_MATERIALS = new Set(['ceramic', 'wood', 'metal', 'plastic', 'fabric']);
+
+    function validateObject(obj) {
+      if (!obj || typeof obj !== 'object') return null;
+      if (!obj.label || !['cylinder', 'cuboid'].includes(obj.shape)) return null;
+      if (obj.shape === 'cylinder') {
+        obj.radius = Math.max(0.005, Math.min(0.5, +obj.radius || 0.04));
+        obj.height = Math.max(0.005, Math.min(1.0, +obj.height || 0.10));
+      } else {
+        if (!Array.isArray(obj.dims) || obj.dims.length < 3) obj.dims = [0.1, 0.1, 0.1];
+        obj.dims = obj.dims.map(d => Math.max(0.001, Math.min(1.0, +d || 0.05)));
+      }
+      obj.mass_kg    = Math.max(0.01, Math.min(25, +obj.mass_kg || 0.3));
+      obj.material   = VALID_MATERIALS.has(obj.material) ? obj.material : 'plastic';
+      obj.position   = Array.isArray(obj.position) ? obj.position.map(Number) : [0, 0.85, 0];
+      obj.has_handle = !!obj.has_handle;
+      obj.has_strap  = !!obj.has_strap;
+      obj.num_handles = Math.max(0, Math.min(4, Math.round(+obj.num_handles || 0)));
+      obj.has_lid    = !!obj.has_lid;
+      return obj;
+    }
+
+    function toBase64(file) {
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+    }
+
+    function setStatus(msg, color = '#666') {
+      document.getElementById('detectStatus').innerHTML = `<span style="color:${color}">${msg}</span>`;
+    }
+
+    function renderBadges(objects, source) {
+      const container = document.getElementById('badges');
+      container.innerHTML = '';
+      for (const obj of objects) {
+        const b = document.createElement('span');
+        b.className = `badge ${obj.shape}`;
+        const icon = obj.shape === 'cylinder' ? '●' : '■';
+        b.innerHTML = `${icon} ${obj.label} <span class="badge-source">${source}</span>`;
+        container.appendChild(b);
+      }
+    }
+
+    // --- GLB offscreen render for Claude Vision ---
+    async function renderGLBForVision(glbPath) {
+      const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      renderer.setSize(768, 768);
+      renderer.setClearColor(0x1a1a2e);
+
+      const loader = new GLTFLoader();
+      const gltf = await new Promise((res, rej) => loader.load(glbPath, res, undefined, rej));
+      const scene = gltf.scene;
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+      dir.position.set(1, 2, 1);
+      scene.add(dir);
+
+      const box    = new THREE.Box3().setFromObject(scene);
+      const center = box.getCenter(new THREE.Vector3());
+      const size   = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+
+      const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
+      camera.position.set(center.x + maxDim * 0.9, center.y + maxDim * 0.7, center.z + maxDim * 0.9);
+      camera.lookAt(center);
+
+      renderer.render(scene, camera);
+      const b64 = renderer.domElement.toDataURL('image/jpeg', 0.85).split(',')[1];
+      renderer.dispose();
+      return b64; // always jpeg, no size issue
+    }
+
+    async function callClaudeVision(b64, mediaType, apiKey, worldKey) {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-4-6',
+          max_tokens: 2048,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } },
+              { type: 'text',  text: DETECTION_PROMPT }
+            ]
+          }]
+        })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error.message);
+      const raw     = data.content[0].text.trim();
+      const jsonStr = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+      const objects = JSON.parse(jsonStr).map(validateObject).filter(Boolean);
+      if (objects.length === 0) throw new Error('No valid objects parsed');
+      WORLD_OBJECTS[worldKey] = objects;
+      renderBadges(objects, 'Claude Vision');
+      setStatus(`Detected ${objects.length} objects — ready to simulate`, '#0f0');
+    }
+
+    window.updateDetectBtns = () => {
+      const hasKey = document.getElementById('apiKey').value.trim().startsWith('sk-');
+      document.getElementById('detect3dBtn').disabled  = !hasKey;
+      const hasFile = !!document.getElementById('screenshotFile').files[0];
+      document.getElementById('detectImgBtn').disabled = !(hasKey && hasFile);
+    };
+
+    window.onFileChange = (input) => {
+      const file = input.files[0];
+      if (!file) return;
+      const name = file.name.length > 20 ? file.name.slice(0,18)+'...' : file.name;
+      document.getElementById('fileName').textContent = name;
+      if (file.size > 5 * 1024 * 1024) {
+        setStatus(`Image too large: ${(file.size/1024/1024).toFixed(1)}MB — max 5MB. Use a cropped screenshot.`, '#f44');
+        document.getElementById('detectImgBtn').disabled = true;
+        return;
+      }
+      setStatus('');
+      updateDetectBtns();
+    };
+
+    window.runDetection3d = async () => {
+      const apiKey   = document.getElementById('apiKey').value.trim();
+      const opt      = document.getElementById('worldSelect').selectedOptions[0];
+      const worldKey = opt.dataset.world;
+      // Derive PNG path from GLB path: replace _collider.glb → .png
+      const pngPath  = opt.value.replace('_collider.glb', '.png');
+      document.getElementById('detect3dBtn').disabled = true;
+      setStatus('Loading world image...', '#c8f');
+      try {
+        const resp = await fetch(pngPath);
+        if (!resp.ok) throw new Error(`Could not load ${pngPath}`);
+        const blob = await resp.blob();
+        const b64  = await toBase64(blob);
+        setStatus('Calling Claude Vision...', '#c8f');
+        await callClaudeVision(b64, 'image/png', apiKey, worldKey);
+        runPipeline();
+      } catch (err) {
+        setStatus(`Detection failed: ${err.message}`, '#f44');
+        console.error(err);
+      } finally {
+        document.getElementById('detect3dBtn').disabled = false;
+        updateDetectBtns();
+      }
+    };
+
+    window.runDetectionImg = async () => {
+      const apiKey      = document.getElementById('apiKey').value.trim();
+      const wltKey      = document.getElementById('wltKey').value.trim();
+      const file        = document.getElementById('screenshotFile').files[0];
+      const customName  = document.getElementById('uploadName').value.trim() ||
+                          file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ') ||
+                          'Uploaded Image';
+      document.getElementById('detectImgBtn').disabled = true;
+
+      try {
+        const b64      = await toBase64(file);
+        const ext      = file.name.split('.').pop().toLowerCase();
+        const mediaType = file.type || 'image/png';
+
+        // Step 1: Claude Vision — add world to selector immediately so Run Simulation works
+        const uploadKey = `upload_${Date.now()}`;
+        setStatus('Detecting objects with Claude Vision...', '#c8f');
+        await callClaudeVision(b64, mediaType, apiKey, uploadKey);
+        addWorldToSelector(uploadKey, customName);
+        renderBadges(WORLD_OBJECTS[uploadKey], 'Claude Vision');
+        setStatus(`Detected ${WORLD_OBJECTS[uploadKey].length} objects — running simulation...`, '#0f0');
+        runPipeline();
+
+        // Step 2: World Labs generation (optional, runs after detection so user can simulate immediately)
+        if (wltKey) {
+          setStatus('Generating world from image...', '#c8f');
+          const worldResult = await generateWorldFromImage(b64, ext, wltKey);
+          if (worldResult) {
+            const { worldId } = worldResult;
+            // Migrate objects to the WLT world key and update the selector option
+            WORLD_OBJECTS[worldId] = WORLD_OBJECTS[uploadKey] ?? [];
+            delete WORLD_OBJECTS[uploadKey];
+            const sel = document.getElementById('worldSelect');
+            const existingOpt = sel.querySelector(`option[data-world="${uploadKey}"]`);
+            if (existingOpt) { existingOpt.dataset.world = worldId; }
+            setStatus(`World generated — ${WORLD_OBJECTS[worldId].length} objects ready`, '#0f0');
+          }
+        }
+      } catch (err) {
+        setStatus(`Failed: ${err.message}`, '#f44');
+        console.error(err);
+      } finally {
+        document.getElementById('detectImgBtn').disabled = false;
+        updateDetectBtns();
+      }
+    };
+
+    // Object definitions per world
+    // shape_ratio = height/width — high ratio = tall/thin = pinch candidate
+    const WORLD_OBJECTS = {
+      workshop: [
+        { label: 'sheet of sandpaper', shape: 'cuboid',   dims: [0.28, 0.003, 0.22],  mass_kg: 0.05, material: 'fabric',   position: [0.3, 0.8, 0.1] },
+        { label: 'metal wrench',       shape: 'cylinder', radius: 0.018, height: 0.28, mass_kg: 0.45, material: 'metal',   position: [0.1, 0.8, 0.3] },
+        { label: 'plastic cup',        shape: 'cylinder', radius: 0.045, height: 0.12, mass_kg: 0.18, material: 'plastic', position: [-0.2, 0.78, 0.2] },
+        { label: 'bolt jar',           shape: 'cylinder', radius: 0.055, height: 0.10, mass_kg: 0.9,  material: 'metal',   position: [0.5, 0.77, -0.1], has_lid: true },
+        { label: 'business card',      shape: 'cuboid',   dims: [0.09, 0.001, 0.054],  mass_kg: 0.003, material: 'fabric', position: [-0.1, 0.8, -0.2] },
+        { label: 'paint bucket',       shape: 'cylinder', radius: 0.14, height: 0.30,  mass_kg: 4.5,  material: 'plastic', position: [0.6, 0.75, 0.3],  has_handle: true, num_handles: 1 },
+        { label: 'toolbox',            shape: 'cuboid',   dims: [0.45, 0.22, 0.22],    mass_kg: 6.0,  material: 'metal',   position: [-0.4, 0.75, -0.3], num_handles: 2 },
+        { label: 'paint can lid',      shape: 'cylinder', radius: 0.14, height: 0.015, mass_kg: 0.12, material: 'metal',   position: [0.2, 0.84, -0.2],  has_lid: true },
+      ],
+      living_room: [
+        { label: 'ceramic mug',        shape: 'cylinder', radius: 0.042, height: 0.10, mass_kg: 0.3,  material: 'ceramic', position: [0.3, 0.85, 0.2],  has_handle: true, num_handles: 1 },
+        { label: 'TV remote',          shape: 'cuboid',   dims: [0.025, 0.015, 0.18],  mass_kg: 0.09, material: 'plastic', position: [-0.2, 0.83, 0.1] },
+        { label: 'magazine',           shape: 'cuboid',   dims: [0.21, 0.004, 0.28],   mass_kg: 0.18, material: 'fabric',  position: [0.1, 0.82, -0.1] },
+        { label: 'candle jar',         shape: 'cylinder', radius: 0.05, height: 0.09,  mass_kg: 0.4,  material: 'ceramic', position: [-0.3, 0.84, 0.3], has_lid: true },
+        { label: 'coaster',            shape: 'cylinder', radius: 0.048, height: 0.005, mass_kg: 0.04, material: 'wood',   position: [0.0, 0.84, 0.4] },
+        { label: 'cooking pot',        shape: 'cylinder', radius: 0.13, height: 0.20,  mass_kg: 3.5,  material: 'metal',   position: [-0.1, 0.78, -0.3], num_handles: 2 },
+        { label: 'shopping bag',       shape: 'cuboid',   dims: [0.35, 0.40, 0.15],    mass_kg: 2.8,  material: 'plastic', position: [0.5, 0.75, 0.0],   has_handle: true, num_handles: 1 },
+        { label: 'laundry basket',     shape: 'cuboid',   dims: [0.55, 0.35, 0.40],    mass_kg: 5.0,  material: 'plastic', position: [-0.5, 0.73, 0.4],  num_handles: 2 },
+      ],
+    };
+
+    const MATERIALS = {
+      ceramic: { friction: 0.60, restitution: 0.15 },
+      wood:    { friction: 0.50, restitution: 0.30 },
+      metal:   { friction: 0.28, restitution: 0.10 },
+      plastic: { friction: 0.42, restitution: 0.38 },
+      fabric:  { friction: 0.72, restitution: 0.05 },
+    };
+
+    // --- Material density ranges (kg/m³) for probabilistic mass estimation ---
+    const DENSITY_RANGES = {
+      ceramic: { min: 1800, max: 2800 },
+      wood:    { min: 400,  max: 900  },
+      metal:   { min: 2700, max: 8000 },
+      plastic: { min: 900,  max: 1400 },
+      fabric:  { min: 50,   max: 300  },
+    };
+
+    function objectVolume(obj) {
+      return obj.shape === 'cylinder'
+        ? Math.PI * obj.radius ** 2 * obj.height
+        : obj.dims[0] * obj.dims[1] * obj.dims[2];
+    }
+
+    // Handle load capacity (N) by material — rated load for a typical handle of that material
+    // e.g. fabric backpack strap ~200N, plastic suitcase handle ~150N, metal toolbox ~300N
+    const HANDLE_CAPACITY_N = { fabric: 200, plastic: 150, wood: 160, metal: 300, ceramic: 80 };
+
+    // Liftability: two models depending on grasp type.
+    // Friction model: Coulomb friction, closing force vs weight.
+    // Capacity model: for handle-based grasps — weight vs rated handle load.
+    function liftProbability(obj, mat, graspType, N = 30) {
+      const { min, max } = DENSITY_RANGES[obj.material] ?? { min: 500, max: 1500 };
+      const volume        = objectVolume(obj);
+
+      // Hook with a real handle/strap → mechanical capacity model (no friction needed)
+      const isHandleHook  = graspType === 'hook'  && (obj.has_handle || obj.has_strap);
+      // BiSym with two handles → mechanical capacity (both hands hold handles)
+      const isHandleBiSym = graspType === 'bisym' && (obj.num_handles ?? 0) >= 2;
+
+      if (isHandleHook || isHandleBiSym) {
+        const capacity = (HANDLE_CAPACITY_N[obj.material] ?? 150) * (isHandleBiSym ? 2 : 1);
+        let hits = 0;
+        for (let i = 0; i < N; i++) {
+          const mass   = volume * (min + Math.random() * (max - min));
+          const weight = mass * 9.81;
+          if (weight <= capacity) hits++;
+        }
+        return +(hits / N).toFixed(2);
+      }
+
+      // Friction model for all other grasps
+      const CLOSING_FORCE = 120;  // N — industrial pneumatic gripper
+      const JOINT_TORQUE  = 50;   // N·m — robot arm joint spec
+      const ARM_REACH     = 0.5;  // m
+      const frictionFactor  = { pinch: 0.6, wrap: 1.0, hook: 0.75, bisym: 1.0, biasym: 0.9 }[graspType] ?? 0.7;
+      const forceMultiplier = graspType === 'bisym' ? 2.0 : 1.0;  // two hands → double force
+      const torqueLimit     = JOINT_TORQUE * (graspType === 'bisym' ? 2.0 : 1.0);
+      let hits = 0;
+      for (let i = 0; i < N; i++) {
+        const mass          = volume * (min + Math.random() * (max - min));
+        const weight        = mass * 9.81;
+        const frictionForce = 2 * (CLOSING_FORCE / 2) * mat.friction * frictionFactor * forceMultiplier;
+        const torqueNeeded  = mass * 9.81 * ARM_REACH;
+        if (frictionForce >= weight && torqueNeeded <= torqueLimit) hits++;
+      }
+      return +(hits / N).toFixed(2);
+    }
+
+    // --- World Labs image-to-world generation ---
+    const WLT_BASE = 'https://api.worldlabs.ai';
+    const WORLD_GLB_BUFFERS = {}; // worldKey → ArrayBuffer of downloaded collider
+
+    async function generateWorldFromImage(b64, extension, wltKey) {
+      // 1. Start generation
+      const genResp = await fetch(`${WLT_BASE}/marble/v1/worlds:generate`, {
+        method: 'POST',
+        headers: { 'WLT-Api-Key': wltKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          world_prompt: {
+            type: 'image',
+            image_prompt: { source: 'data_base64', data_base64: b64, extension }
+          },
+          model: 'Marble 0.1-plus',
+        })
+      });
+      const gen = await genResp.json();
+      if (!gen.operation_id) throw new Error(gen.detail ?? 'World Labs generation failed');
+
+      // 2. Poll until done
+      const start = Date.now();
+      let worldId;
+      while (true) {
+        await new Promise(r => setTimeout(r, 4000));
+        const elapsed = Math.round((Date.now() - start) / 1000);
+        setStatus(`Generating world... ${elapsed}s`, '#c8f');
+        const poll = await fetch(`${WLT_BASE}/marble/v1/operations/${gen.operation_id}`, {
+          headers: { 'WLT-Api-Key': wltKey }
+        }).then(r => r.json());
+        if (poll.error) throw new Error(poll.error.message ?? 'Generation error');
+        if (poll.done) { worldId = poll.response?.world_id; break; }
+        if (Date.now() - start > 180000) throw new Error('Generation timed out after 3 min');
+      }
+
+      // 3. Fetch world details
+      const world = await fetch(`${WLT_BASE}/marble/v1/worlds/${worldId}`, {
+        headers: { 'WLT-Api-Key': wltKey }
+      }).then(r => r.json());
+
+      const colliderUrl = world.assets?.mesh?.collider_mesh_url ?? world.collider_mesh_url;
+      const displayName = world.display_name ?? worldId;
+
+      // 4. Download collider GLB
+      if (colliderUrl) {
+        const buf = await fetch(colliderUrl).then(r => r.arrayBuffer());
+        WORLD_GLB_BUFFERS[worldId] = buf;
+      }
+
+      return { worldId, displayName };
+    }
+
+    function addWorldToSelector(worldId, displayName) {
+      const sel = document.getElementById('worldSelect');
+      // Remove existing generated option with same id if re-generated
+      const existing = sel.querySelector(`option[data-world="${worldId}"]`);
+      if (existing) existing.remove();
+      const opt = document.createElement('option');
+      opt.value          = '';           // no local GLB path — uses buffer
+      opt.dataset.world  = worldId;
+      opt.dataset.generated = 'true';
+      opt.textContent    = `✦ ${displayName}`;
+      sel.appendChild(opt);
+      sel.value = '';
+      // Force select the new option by index
+      sel.selectedIndex = sel.options.length - 1;
+    }
+
+    // Ground truth derived from the same geometric scoring functions used for recommendations
+    // so accuracy measures whether Rapier displacement (30%) ever overrides geometry (70%)
+    function groundTruthGraspType(obj) {
+      const mat = MATERIALS[obj.material];
+      const scores = {
+        pinch:  geometricPinchScore(obj, mat),
+        wrap:   geometricWrapScore(obj, mat),
+        hook:   geometricHookScore(obj, mat),
+        bisym:  geometricBiSymScore(obj, mat),
+        biasym: geometricBiAsymScore(obj, mat),
+      };
+      return Object.entries(scores).reduce((a, b) => a[1] >= b[1] ? a : b)[0];
+    }
+
+    function makeObjectCollider(RAPIER, obj, mat) {
+      let desc;
+      if (obj.shape === 'cylinder') {
+        desc = RAPIER.ColliderDesc.cylinder(obj.height / 2, obj.radius);
+      } else {
+        const [w, h, d] = obj.dims;
+        desc = RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2);
+      }
+      return desc.setFriction(mat.friction).setRestitution(mat.restitution);
+    }
+
+    // --- Geometry-based scoring (physically motivated, reliable) ---
+    // Pinch: works when thin dimension is graspable with fingertips
+    function geometricPinchScore(obj, mat) {
+      const dims = obj.shape === 'cylinder'
+        ? [obj.radius * 2, obj.height, obj.radius * 2]
+        : obj.dims;
+      const sorted = [...dims].sort((a, b) => a - b);
+      const thinDim = sorted[0];
+      // Thin < 5mm = perfect pinch candidate; > 5cm = too thick for fingertips
+      const thinness  = Math.max(0, 1 - thinDim / 0.05);
+      const massOK    = Math.max(0, 1 - obj.mass_kg / 1.5);
+      return Math.min(1, thinness * 0.65 + mat.friction * 0.20 + massOK * 0.15);
+    }
+
+    // Wrap: works when grippable cross-section fits comfortably in a palm (3–15 cm)
+    function geometricWrapScore(obj, mat) {
+      let gripWidth;
+      if (obj.shape === 'cylinder') {
+        gripWidth = obj.radius * 2;
+      } else {
+        const sorted = [...obj.dims].sort((a, b) => a - b);
+        gripWidth = sorted[1]; // median dim — not the thinnest, not the longest
+      }
+      // Gaussian peak at 8 cm, falls off outside 3–15 cm
+      const inRange   = gripWidth >= 0.03 && gripWidth <= 0.15;
+      const rangeScore = inRange ? 1 - Math.abs(gripWidth - 0.08) / 0.08 : 0;
+      const contactLen = obj.shape === 'cylinder' ? obj.height : Math.max(...obj.dims);
+      const lenScore  = Math.min(contactLen / 0.10, 1);
+      return Math.min(1, rangeScore * 0.60 + lenScore * 0.20 + mat.friction * 0.20);
+    }
+
+    // --- Rapier simulation: close fingers, apply test force, measure displacement ---
+    // No contact impulse API — just position tracking (reliable in WASM)
+    function runGraspSim(RAPIER, obj, mat, graspType) {
+      const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+      world.createCollider(
+        RAPIER.ColliderDesc.cuboid(5, 0.02, 5).setFriction(0.5),
+        world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
+      );
+
+      const objBody = world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 0.5, 0).setAdditionalMass(obj.mass_kg)
+      );
+      world.createCollider(makeObjectCollider(RAPIER, obj, mat), objBody);
+
+      // Settle onto floor
+      for (let i = 0; i < 100; i++) world.step();
+      const settled = { ...objBody.translation() };
+
+      // Finger geometry based on grasp type
+      let f1, f2, gripReach;
+      if (graspType === 'pinch') {
+        // Y-axis: fingertip balls contact top + bottom face
+        const halfH = obj.shape === 'cylinder' ? obj.height / 2 : Math.min(...obj.dims) / 2;
+        const PAD = 0.008;
+        gripReach = halfH + PAD + 0.001;
+        f1 = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, settled.y + 0.3, 0));
+        f2 = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, settled.y - 0.3, 0));
+        world.createCollider(RAPIER.ColliderDesc.ball(PAD).setFriction(mat.friction * 1.4), f1);
+        world.createCollider(RAPIER.ColliderDesc.ball(PAD).setFriction(mat.friction * 1.4), f2);
+        for (let s = 0; s < 150; s++) {
+          const reach = 0.3 - (s / 150) * (0.3 - gripReach);
+          f1.setNextKinematicTranslation({ x: 0, y: settled.y + reach, z: 0 });
+          f2.setNextKinematicTranslation({ x: 0, y: settled.y - reach, z: 0 });
+          world.step();
+        }
+      } else {
+        // X-axis: wide pads contact sides
+        const halfW = obj.shape === 'cylinder' ? obj.radius : obj.dims[0] / 2;
+        const PD = 0.015;
+        gripReach = halfW + PD + 0.001;
+        f1 = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0.3, settled.y, 0));
+        f2 = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(-0.3, settled.y, 0));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(PD, 0.05, 0.04).setFriction(mat.friction), f1);
+        world.createCollider(RAPIER.ColliderDesc.cuboid(PD, 0.05, 0.04).setFriction(mat.friction), f2);
+        for (let s = 0; s < 150; s++) {
+          const reach = 0.3 - (s / 150) * (0.3 - gripReach);
+          f1.setNextKinematicTranslation({ x:  reach, y: settled.y, z: 0 });
+          f2.setNextKinematicTranslation({ x: -reach, y: settled.y, z: 0 });
+          world.step();
+        }
+      }
+
+      // Record gripped position, then apply moderate test force scaled to mass
+      const before = { ...objBody.translation() };
+      const testF  = obj.mass_kg * 9.81 * 0.8;
+      objBody.applyImpulse({ x: testF * 0.4, y: testF, z: 0 }, true);
+
+      // Hold fingers locked, let physics respond
+      for (let s = 0; s < 80; s++) {
+        if (graspType === 'pinch') {
+          f1.setNextKinematicTranslation({ x: 0, y: settled.y + gripReach, z: 0 });
+          f2.setNextKinematicTranslation({ x: 0, y: settled.y - gripReach, z: 0 });
+        } else {
+          f1.setNextKinematicTranslation({ x:  gripReach, y: settled.y, z: 0 });
+          f2.setNextKinematicTranslation({ x: -gripReach, y: settled.y, z: 0 });
+        }
+        world.step();
+      }
+
+      const after = objBody.translation();
+      const displacement = Math.sqrt(
+        (after.x - before.x) ** 2 + (after.y - before.y) ** 2 + (after.z - before.z) ** 2
+      );
+      // Threshold scales with object size: must stay within 1× its own largest dimension
+      const maxObjDim = obj.shape === 'cylinder'
+        ? Math.max(obj.radius * 2, obj.height)
+        : Math.max(...obj.dims);
+      const liftSuccess = displacement < maxObjDim;
+      world.free();
+      return { displacement_m: +displacement.toFixed(4), lift_success: liftSuccess };
+    }
+
+    function simPinch(RAPIER, obj, mat) {
+      const geo      = geometricPinchScore(obj, mat);
+      const sim      = runGraspSim(RAPIER, obj, mat, 'pinch');
+      const simScore = Math.max(0, 1 - sim.displacement_m / 0.25);
+      return { score: +(geo * 0.7 + simScore * 0.3).toFixed(3),
+               p_liftable: liftProbability(obj, mat, 'pinch'),
+               displacement_m: sim.displacement_m, contact_area: 'point', finger_pad_m: 0.008 };
+    }
+
+    function simWrap(RAPIER, obj, mat) {
+      const geo      = geometricWrapScore(obj, mat);
+      const sim      = runGraspSim(RAPIER, obj, mat, 'wrap');
+      const simScore = Math.max(0, 1 - sim.displacement_m / 0.25);
+      return { score: +(geo * 0.7 + simScore * 0.3).toFixed(3),
+               p_liftable: liftProbability(obj, mat, 'wrap'),
+               displacement_m: sim.displacement_m, contact_area: 'pad', finger_pad_m: 0.04 };
+    }
+
+    // Hook: fingers curl under a handle/loop (bag handle, drawer pull, bucket handle)
+    // Optimal handle radius 5–25 mm; load is carried via tension, not squeeze
+    function geometricHookScore(obj, mat) {
+      const hasHandle = obj.has_handle ?? false;
+      let shapeScore = 0;
+      if (obj.shape === 'cylinder') {
+        shapeScore = (obj.radius >= 0.005 && obj.radius <= 0.025)
+          ? Math.max(0, 1 - Math.abs(obj.radius - 0.012) / 0.015) : 0;
+      } else {
+        const sorted = [...obj.dims].sort((a, b) => a - b);
+        const thin = sorted[0];
+        shapeScore = (thin >= 0.005 && thin <= 0.030)
+          ? Math.max(0, 1 - Math.abs(thin - 0.015) / 0.020) : 0;
+      }
+      const massOK = Math.max(0, 1 - obj.mass_kg / 8.0);
+      return Math.min(1, (hasHandle ? 0.45 : 0) + shapeScore * 0.40 + massOK * 0.15);
+    }
+
+    // Bilateral symmetric: both hands grip symmetrically by size, mass, or two handles
+    // (cooking pot by two side handles, laundry basket, large box)
+    function geometricBiSymScore(obj, mat) {
+      const numHandles = obj.num_handles ?? 0;
+      const size = obj.shape === 'cylinder' ? obj.radius * 2 : Math.max(...obj.dims);
+      const sizeScore   = Math.min(1, Math.max(0, (size - 0.20) / 0.20));
+      const massScore   = Math.min(1, Math.max(0, (obj.mass_kg - 1.5) / 3.0));
+      const handleScore = Math.min(1, numHandles / 2);
+      return Math.min(1, sizeScore * 0.30 + massScore * 0.35 + handleScore * 0.25 + mat.friction * 0.10);
+    }
+
+    // Bilateral asymmetric: hands play different roles — one holds body, other rotates lid
+    // (jar to unscrew, bottle cap). Near-zero without has_lid flag.
+    function geometricBiAsymScore(obj, mat) {
+      const hasLid = obj.has_lid ?? false;
+      if (!hasLid) return 0.02;
+      const bodyGripWidth = obj.shape === 'cylinder' ? obj.radius * 2
+        : [...obj.dims].sort((a, b) => a - b)[1];
+      const bodyScore = (bodyGripWidth >= 0.04 && bodyGripWidth <= 0.15) ? 1.0 : 0.5;
+      const massScore = Math.min(1, obj.mass_kg / 1.5);
+      return Math.min(1, bodyScore * 0.60 + massScore * 0.25 + mat.friction * 0.15);
+    }
+
+    function simHook(RAPIER, obj, mat) {
+      const geo      = geometricHookScore(obj, mat);
+      const sim      = runGraspSim(RAPIER, obj, mat, 'wrap'); // reuse wrap finger geometry
+      const simScore = Math.max(0, 1 - sim.displacement_m / 0.25);
+      return { score: +(geo * 0.7 + simScore * 0.3).toFixed(3),
+               p_liftable: liftProbability(obj, mat, 'hook') };
+    }
+
+    function simBiSym(RAPIER, obj, mat) {
+      const geo      = geometricBiSymScore(obj, mat);
+      const sim      = runGraspSim(RAPIER, obj, mat, 'wrap'); // symmetric wide pads
+      const simScore = Math.max(0, 1 - sim.displacement_m / 0.25);
+      return { score: +(geo * 0.7 + simScore * 0.3).toFixed(3),
+               p_liftable: liftProbability(obj, mat, 'bisym') };
+    }
+
+    function simBiAsym(RAPIER, obj, mat) {
+      const geo      = geometricBiAsymScore(obj, mat);
+      const sim      = runGraspSim(RAPIER, obj, mat, 'wrap'); // primary hand wraps body
+      const simScore = Math.max(0, 1 - sim.displacement_m / 0.25);
+      return { score: +(geo * 0.7 + simScore * 0.3).toFixed(3),
+               p_liftable: liftProbability(obj, mat, 'biasym') };
+    }
+
+    function graspWhy(obj, recommended, scores) {
+      const best = (scores[recommended] * 100).toFixed(0);
+      if (recommended === 'pinch') {
+        const t = obj.shape === 'cuboid' ? `thin profile (${(Math.min(...obj.dims)*1000).toFixed(1)}mm)` : 'flat disc geometry';
+        return `${t} — fingertip contact scores ${best}%, highest of all grasp types`;
+      } else if (recommended === 'wrap') {
+        const r = obj.shape === 'cylinder' ? `${(obj.radius*1000).toFixed(0)}mm radius` : 'grippable cross-section';
+        return `${r} — palm pad contact scores ${best}%, best distribution of grip force`;
+      } else if (recommended === 'hook') {
+        const dim = obj.shape === 'cylinder' ? `r=${(obj.radius*1000).toFixed(0)}mm handle` : `${(Math.min(...obj.dims)*1000).toFixed(0)}mm strap`;
+        return `${dim} suits finger-curl hook (${best}%) — load carried via tension, not squeeze`;
+      } else if (recommended === 'bisym') {
+        const span = obj.shape === 'cylinder' ? (obj.radius*2*100).toFixed(0) : (Math.max(...obj.dims)*100).toFixed(0);
+        const nH = obj.num_handles ?? 0;
+        return nH >= 2
+          ? `Two handles across ${span}cm span — symmetric two-handed grip scores ${best}%`
+          : `${obj.mass_kg}kg over ${span}cm — too wide/heavy for one hand, symmetric two-handed grip scores ${best}%`;
+      } else { // biasym
+        return `Has lid — primary hand wraps body, secondary rotates top independently (${best}%)`;
+      }
+    }
+
+    // --- Render a result card ---
+    const GRASP_COLORS = { pinch:'#f90', wrap:'#4af', hook:'#a8f', bisym:'#4fa', biasym:'#f4a' };
+    const GRASP_LABELS = { pinch:'Pinch', wrap:'Wrap', hook:'Hook', bisym:'BiSym', biasym:'BiAsym' };
+    function renderCard(record) {
+      const grid = document.getElementById('grid');
+      const rec  = record.recommended_grasp;
+      const card = document.createElement('div');
+      card.className = `obj-card ${rec}`;
+
+      const activePct = (record[rec].score * 100).toFixed(0);
+      const margin    = record.confidence_margin;
+      const marginPct = Math.round(margin * 100);
+      const confClass = margin >= 0.15 ? 'conf-high' : margin >= 0.08 ? 'conf-med' : 'conf-low';
+      const confLabel = margin >= 0.15 ? `+${marginPct}% HIGH` : margin >= 0.08 ? `+${marginPct}% MED` : `+${marginPct}% REVIEW`;
+
+      const scoreItems = ['pinch','wrap','hook','bisym','biasym'].map(g => {
+        const pct = (record[g].score * 100).toFixed(0);
+        const col = g === rec ? GRASP_COLORS[g] : '#444';
+        return `<div class="s-item"><span class="s-lbl">${GRASP_LABELS[g]}</span><span class="s-val" style="color:${col}">${pct}%</span></div>`;
+      }).join('');
+
+      const liftRec = record[rec];
+      const liftPct = Math.round(liftRec.p_liftable * 100);
+      const liftCol = liftRec.p_liftable >= 0.7 ? '#0f0' : liftRec.p_liftable >= 0.4 ? '#fa0' : '#f44';
+
+      const reviewBar = margin < 0.08
+        ? `<div class="review-bar">⚠ Low margin — two grasp types within ${marginPct}% of each other. Human review recommended.</div>`
+        : '';
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="obj-name">${record.object_label}</div>
+          <span class="conf-badge ${confClass}">${confLabel}</span>
+        </div>
+        <span class="grasp-badge">${GRASP_LABELS[rec].toUpperCase()} GRASP</span>
+        <div class="score-row">${scoreItems}</div>
+        <div class="metric">
+          <div class="metric-label">Lift probability</div>
+          <div class="metric-value" style="color:${liftCol}">${liftPct}%</div>
+        </div>
+        <div class="score-bar"><div class="score-fill" style="width:${activePct}%"></div></div>
+        <div class="why">${record.grasp_rationale}</div>
+        ${reviewBar}
+      `;
+      grid.appendChild(card);
+    }
+
+    window.runPipeline = async () => {
+      logEl.textContent = '';
+      exportData = null;
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('download').style.display = 'none';
+      document.getElementById('grid').innerHTML = '';
+      document.getElementById('tableBody').innerHTML = '';
+      document.getElementById('tableTitle').textContent = '';
+      setView('grid');
+      document.getElementById('runBtn').disabled = true;
+
+      const opt = document.getElementById('worldSelect').selectedOptions[0];
+      const worldKey = opt.dataset.world;
+      const worldName = opt.text.replace(/^✦\s*/, '').trim();
+      const objects = WORLD_OBJECTS[worldKey];
+
+      print(`World: ${worldName} — ${objects.length} objects`);
+      await RAPIER.init();
+      print('Rapier ready');
+
+      const records = [];
+
+      for (const obj of objects) {
+        print(`  Simulating: ${obj.label}...`);
+        const mat = MATERIALS[obj.material];
+
+        const pinch  = simPinch(RAPIER, obj, mat);
+        const wrap   = simWrap(RAPIER, obj, mat);
+        const hook   = simHook(RAPIER, obj, mat);
+        const bisym  = simBiSym(RAPIER, obj, mat);
+        const biasym = simBiAsym(RAPIER, obj, mat);
+        const allScores = { pinch: pinch.score, wrap: wrap.score, hook: hook.score, bisym: bisym.score, biasym: biasym.score };
+        const sortedScores = Object.entries(allScores).sort((a,b) => b[1]-a[1]);
+        const recommended = sortedScores[0][0];
+        const confidenceMargin = +(sortedScores[0][1] - sortedScores[1][1]).toFixed(3);
+
+        const record = {
+          world: worldName,
+          object_label: obj.label,
+          material: obj.material,
+          mass_kg: obj.mass_kg,
+          geometry: obj.shape === 'cylinder'
+            ? { shape: 'cylinder', radius_m: obj.radius, height_m: obj.height }
+            : { shape: 'cuboid', dims_m: obj.dims },
+          pinch, wrap, hook, bisym, biasym,
+          recommended_grasp: recommended,
+          confidence_margin: confidenceMargin,
+          ground_truth_grasp: groundTruthGraspType(obj),
+          grasp_rationale: graspWhy(obj, recommended, allScores),
+          surface_label: null,
+        };
+        records.push(record);
+        const top2 = Object.entries(allScores).sort((a,b)=>b[1]-a[1]).slice(0,2)
+          .map(([g,s])=>`${g} ${(s*100).toFixed(0)}%`).join(' / ');
+        print(`    -> ${recommended.toUpperCase()} (${top2})`);
+        renderCard(record);
+        renderTableRow(record);
+      }
+
+      exportData = {
+        world_id: worldKey,
+        world_name: worldName,
+        generated_at: new Date().toISOString(),
+        grasp_type_labels: ['pinch', 'wrap', 'hook', 'bisym', 'biasym'],
+        objects: records,
+      };
+
+      const counts = { pinch:0, wrap:0, hook:0, bisym:0, biasym:0 };
+      records.forEach(r => counts[r.recommended_grasp]++);
+      const accuracy = records.filter(r => r.recommended_grasp === r.ground_truth_grasp).length;
+      const gc = GRASP_COLORS;
+
+      document.getElementById('summary').innerHTML =
+        `<strong>${records.length}</strong> objects &nbsp;|&nbsp; ` +
+        `<span style="color:${gc.pinch}">${counts.pinch} pinch</span> &nbsp; ` +
+        `<span style="color:${gc.wrap}">${counts.wrap} wrap</span> &nbsp; ` +
+        `<span style="color:${gc.hook}">${counts.hook} hook</span> &nbsp; ` +
+        `<span style="color:${gc.bisym}">${counts.bisym} bisym</span> &nbsp; ` +
+        `<span style="color:${gc.biasym}">${counts.biasym} biasym</span> &nbsp;</strong>`;
+
+      document.getElementById('results').style.display = 'block';
+      document.getElementById('download').style.display = 'inline';
+      document.getElementById('downloadCsv').style.display = 'inline';
+      document.getElementById('tableBody').style.display = '';
+      setView(currentView); // re-apply view state after results render
+      document.getElementById('runBtn').disabled = false;
+      print(`Done. ${records.length} records generated.`);
+    };
+
+    window.downloadData = () => {
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `grasp_dataset_${exportData.world_id}.json`;
+      a.click();
+    };
+
+    // --- View toggle ---
+    let currentView = 'grid';
+    window.setView = (view) => {
+      currentView = view;
+      document.getElementById('grid').style.display      = view === 'grid'  ? 'grid' : 'none';
+      document.getElementById('tableView').style.display = view === 'table' ? 'block' : 'none';
+      document.getElementById('btnGrid').classList.toggle('active',  view === 'grid');
+      document.getElementById('btnTable').classList.toggle('active', view === 'table');
+    };
+
+    // --- Table sort (click column header) ---
+    let sortCol = -1, sortAsc = true;
+    window.sortTable = (col) => {
+      const tbody = document.getElementById('tableBody');
+      const rows  = Array.from(tbody.querySelectorAll('tr'));
+      sortAsc = sortCol === col ? !sortAsc : true;
+      sortCol = col;
+      rows.sort((a, b) => {
+        const av = a.cells[col].dataset.val ?? a.cells[col].textContent;
+        const bv = b.cells[col].dataset.val ?? b.cells[col].textContent;
+        const an = parseFloat(av), bn = parseFloat(bv);
+        const cmp = isNaN(an) ? av.localeCompare(bv) : an - bn;
+        return sortAsc ? cmp : -cmp;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+    };
+
+    function renderTableRow(record) {
+      const rec       = record[record.recommended_grasp];
+      const liftColor = rec.p_liftable >= 0.7 ? '#0f0' : rec.p_liftable >= 0.4 ? '#fa0' : '#f44';
+      const dims      = record.geometry.shape === 'cylinder'
+        ? `r=${(record.geometry.radius_m*100).toFixed(0)/100}m h=${(record.geometry.height_m*100).toFixed(0)/100}m`
+        : record.geometry.dims_m.map(d => +(d.toFixed(2))).join('×') + 'm';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="world-cell" data-val="${record.world}">${record.world}</td>
+        <td>${record.object_label}</td>
+        <td>${record.material}</td>
+        <td style="color:#666">${record.geometry.shape}</td>
+        <td style="color:#666;font-family:monospace">${dims}</td>
+        <td class="num" data-val="${record.mass_kg}">${record.mass_kg}</td>
+        <td><span class="pill ${record.recommended_grasp}">${record.recommended_grasp}</span></td>
+        ${(() => {
+          const m = record.confidence_margin; const mp = Math.round(m*100);
+          const col = m >= 0.15 ? '#0f0' : m >= 0.08 ? '#fa0' : '#f55';
+          const lbl = m >= 0.15 ? 'HIGH' : m >= 0.08 ? 'MED' : 'REVIEW';
+          return `<td class="num" data-val="${m}" style="color:${col}">${lbl} +${mp}%</td>`;
+        })()}
+        <td class="num" data-val="${record.pinch.score}"  style="color:${record.recommended_grasp==='pinch' ?'#f90':'#444'}">${record.pinch.score.toFixed(3)}</td>
+        <td class="num" data-val="${record.wrap.score}"   style="color:${record.recommended_grasp==='wrap'  ?'#4af':'#444'}">${record.wrap.score.toFixed(3)}</td>
+        <td class="num" data-val="${record.hook.score}"   style="color:${record.recommended_grasp==='hook'  ?'#a8f':'#444'}">${record.hook.score.toFixed(3)}</td>
+        <td class="num" data-val="${record.bisym.score}"  style="color:${record.recommended_grasp==='bisym' ?'#4fa':'#444'}">${record.bisym.score.toFixed(3)}</td>
+        <td class="num" data-val="${record.biasym.score}" style="color:${record.recommended_grasp==='biasym'?'#f4a':'#444'}">${record.biasym.score.toFixed(3)}</td>
+        <td class="num" data-val="${rec.p_liftable}" style="color:${liftColor}">${rec.p_liftable.toFixed(2)}</td>
+      `;
+      document.getElementById('tableBody').appendChild(tr);
+
+      // set table title once (first row)
+      if (!document.getElementById('tableTitle').textContent) {
+        const slug = record.world.toLowerCase().replace(/\s+/g, '_');
+        document.getElementById('tableTitle').textContent = `grasp_dataset_${slug}`;
+      }
+    }
+
+    // --- CSV export ---
+    window.downloadCSV = () => {
+      const headers = ['world','object_label','material','shape','dims_summary','mass_kg',
+                       'recommended_grasp','confidence_margin',
+                       'pinch_score','wrap_score','hook_score','bisym_score','biasym_score',
+                       'p_liftable','grasp_rationale'];
+      const rows = exportData.objects.map(r => {
+        const dims = r.geometry.shape === 'cylinder'
+          ? `r=${r.geometry.radius_m}m h=${r.geometry.height_m}m`
+          : r.geometry.dims_m.join('x') + 'm';
+        const rec = r[r.recommended_grasp];
+        return [
+          r.world, r.object_label, r.material, r.geometry.shape, dims, r.mass_kg,
+          r.recommended_grasp, r.confidence_margin, r.pinch.score, r.wrap.score, r.hook.score, r.bisym.score, r.biasym.score,
+          rec.p_liftable,
+          `"${r.grasp_rationale.replace(/"/g, '""')}"`
+        ].join(',');
+      });
+      const csv  = [headers.join(','), ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = `grasp_dataset_${exportData.world_id}.csv`;
+      a.click();
+    };
+  </script>
+</body>
+</html>
